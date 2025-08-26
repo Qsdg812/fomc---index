@@ -3,12 +3,12 @@ name: Build & Deploy Pages (Serverless)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 0 * * *'   # 매일 09:30 KST (UTC 00:30)
+    - cron: '30 0 * * *'   # 매일 09:30 KST
 
 permissions:
-  contents: read      # 코드 읽기
-  pages: write        # Pages 배포 권한
-  id-token: write     # OIDC (deploy-pages에 필요)
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: 'pages'
@@ -36,7 +36,6 @@ jobs:
       - name: Run pipeline (scrape -> preprocess -> score -> export)
         run: python -m builder.build
 
-      # site/ 전체를 Pages 아티팩트로 업로드 (브랜치 커밋 불필요)
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
