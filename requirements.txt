@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+lxml
+pdfminer.six
+pandas
+numpy
+python-dateutil
