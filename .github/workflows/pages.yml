@@ -1,7 +1,9 @@
 name: Build & Deploy Pages (Serverless)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # 수동 실행만(충돌 방지용으로 cron은 잠시 끔)
+  # schedule:
+  #   - cron: '30 0 * * *'   # 나중에 성공 확인 후 주석 해제
 
 permissions:
   contents: read
@@ -18,12 +20,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: |
+
+      - name: Install dependencies
+        run: |
+          python -V
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - run: python -m builder.build
+          pip install -r requirements.txt || true
+          pip freeze | sed -n '1,120p'
+
+      - name: Show workspace (debug)
+        run: |
+          ls -la
+          find . -maxdepth 3 -type f | sort | sed -n '1,300p'
+
+      # 🔒 오프라인 안전 모드: 네트워크/스크랩/신문 PDFs 모두 skip
+      - name: Run pipeline (OFFLINE_ONLY)
+        env:
+          OFFLINE_ONLY: "1"
+        run: python -m builder.build
+
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
 
