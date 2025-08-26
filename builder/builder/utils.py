@@ -1,0 +1,19 @@
+from pathlib import Path
+import hashlib
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CACHE = ROOT / ".cache"
+RAW = CACHE / "raw"
+TEXT = CACHE / "text"
+SITE_DATA = ROOT / "site" / "data"
+
+
+for p in [CACHE, RAW, TEXT, SITE_DATA]:
+p.mkdir(parents=True, exist_ok=True)
+
+
+
+
+def sha256_bytes(b: bytes) -> str:
+return hashlib.sha256(b).hexdigest()
