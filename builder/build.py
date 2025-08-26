@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>경제 감성지수 (FOMC 기반) — Serverless</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+.wrap { max-width: 980px; margin: 0 auto; }
+header { display:flex; justify-content: space-between; align-items: baseline; }
+h1 { margin: 0; font-size: 1.6rem; }
+.muted { color: #666; font-size: .9rem; }
+.panel { border: 1px solid #eee; border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>경제 감성지수 (Serverless)</h1>
+<div class="muted">GitHub Actions가 정기적으로 데이터 갱신</div>
+</header>
+
+
+<section class="panel">
+<div id="gauge" style="width:100%;max-width:520px;height:320px;"></div>
+<div class="muted" id="latest-meta"></div>
+</section>
+
+
+<section class="panel">
+<h3>시계열 (월별)</h3>
+<div id="line" style="width:100%;height:380px;"></div>
+</section>
+
+
+<section class="panel">
+<h3>데이터 다운로드</h3>
+<ul>
+<li><a href="data/index_monthly.json">index_monthly.json</a></li>
+<li><a href="data/index_quarterly.json">index_quarterly.json</a></li>
+<li><a href="data/Statements_month_ratio.csv">Statements_month_ratio.csv</a></li>
+<li><a href="data/Minutes_month_ratio.csv">Minutes_month_ratio.csv</a></li>
+</ul>
+</section>
+</div>
+<script>
+async function loadLatest(){
+const r = await fetch('data/latest_monthly.json');
+if(!r.ok) return;
+const arr = await r.json();
+const j = arr[0];
+const v = j.index_0_100;
+
+
+Plotly.newPlot('gauge', [{
+type: 'indicator', mode: 'gauge+number', value: v,
+gauge: { axis: { range: [0,100] }, steps: [
+</html>
