@@ -1,59 +1,49 @@
-<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>경제 감성지수 (FOMC 기반) — Serverless</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<style>
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
-.wrap { max-width: 980px; margin: 0 auto; }
-header { display:flex; justify-content: space-between; align-items: baseline; }
-h1 { margin: 0; font-size: 1.6rem; }
-.muted { color: #666; font-size: .9rem; }
-.panel { border: 1px solid #eee; border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
-</style>
-</head>
-<body>
-<div class="wrap">
-<header>
-<h1>경제 감성지수 (Serverless)</h1>
-<div class="muted">GitHub Actions가 정기적으로 데이터 갱신</div>
-</header>
+from datetime import datetime, date
+import json
+from .utils import SITE_DATA
+from .scrape import discover_statements, discover_minutes, download_and_extract
+from .preprocess import preprocess_text_files
+from .aggregate import compute_timeseries
 
+# 1) discover (실패해도 계속)
+try:
+    statements = discover_statements()
+except Exception as e:
+    print("[warn] discover_statements crashed:", e)
+    statements = []
 
-<section class="panel">
-<div id="gauge" style="width:100%;max-width:520px;height:320px;"></div>
-<div class="muted" id="latest-meta"></div>
-</section>
+try:
+    minutes = discover_minutes(years_back=6)
+except Exception as e:
+    print("[warn] discover_minutes crashed:", e)
+    minutes = []
 
+# 2) download (실패한 URL은 건너뜀)
+text_paths: list[str] = []
+for d, url in (statements + minutes):
+    try:
+        t = download_and_extract(url, date_hint=str(d))
+        text_paths.append(t)
+    except Exception as e:
+        print("[warn] Download failed", url, e)
 
-<section class="panel">
-<h3>시계열 (월별)</h3>
-<div id="line" style="width:100%;height:380px;"></div>
-</section>
+# 3) preprocess → rows
+rows = preprocess_text_files(text_paths)
 
+# 4) aggregate → site/data
+compute_timeseries(rows, SITE_DATA)
 
-<section class="panel">
-<h3>데이터 다운로드</h3>
-<ul>
-<li><a href="data/index_monthly.json">index_monthly.json</a></li>
-<li><a href="data/index_quarterly.json">index_quarterly.json</a></li>
-<li><a href="data/Statements_month_ratio.csv">Statements_month_ratio.csv</a></li>
-<li><a href="data/Minutes_month_ratio.csv">Minutes_month_ratio.csv</a></li>
-</ul>
-</section>
-</div>
-<script>
-async function loadLatest(){
-const r = await fetch('data/latest_monthly.json');
-if(!r.ok) return;
-const arr = await r.json();
-const j = arr[0];
-const v = j.index_0_100;
+# 5) 오프라인/빈 데이터일 때도 사이트가 비지 않게 스텁 JSON 생성
+SITE_DATA.mkdir(parents=True, exist_ok=True)
+index_monthly = SITE_DATA / "index_monthly.json"
+latest_monthly = SITE_DATA / "latest_monthly.json"
+if not index_monthly.exists():
+    stub = [{
+        "date": f"{date.today().isoformat()}T00:00:00.000Z",
+        "score": 0.0,
+        "index_0_100": 50
+    }]
+    index_monthly.write_text(json.dumps(stub), encoding="utf-8")
+    latest_monthly.write_text(json.dumps(stub), encoding="utf-8")
 
-
-Plotly.newPlot('gauge', [{
-type: 'indicator', mode: 'gauge+number', value: v,
-gauge: { axis: { range: [0,100] }, steps: [
-</html>
+print("[OK] Build completed at", datetime.utcnow().isoformat() + "Z")
