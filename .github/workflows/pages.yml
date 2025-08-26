@@ -2,8 +2,6 @@ name: Build & Deploy Pages (Serverless)
 
 on:
   workflow_dispatch:
-  # schedule:
-    # - cron: '30 0 * * *'   # 매일 09:30 KST
 
 permissions:
   contents: read
@@ -18,28 +16,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Run pipeline (scrape -> preprocess -> score -> export)
-        run: python -m builder.build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
+      - run: python -m builder.build
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
 
   deploy:
     needs: build
@@ -48,6 +34,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
