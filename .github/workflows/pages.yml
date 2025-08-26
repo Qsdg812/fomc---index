@@ -1,10 +1,9 @@
 name: Build & Deploy Pages (Serverless)
-
 on:
-  workflow_dispatch:   # 수동 실행만(충돌 방지용으로 cron은 잠시 끔)
-  # schedule:
-  #   - cron: '30 0 * * *'   # 나중에 성공 확인 후 주석 해제
-
+  workflow_dispatch:
+  schedule:
+    - cron: '30 0 * * *'   # 매일 09:30 KST
+    
 permissions:
   contents: read
   pages: write
@@ -38,8 +37,8 @@ jobs:
 
       # 🔒 오프라인 안전 모드: 네트워크/스크랩/신문 PDFs 모두 skip
       - name: Run pipeline (OFFLINE_ONLY)
-        env:
-          OFFLINE_ONLY: "1"
+        #env:
+          #OFFLINE_ONLY: "1"
         run: python -m builder.build
 
       - uses: actions/upload-pages-artifact@v3
