@@ -1,9 +1,10 @@
 name: Build & Deploy Pages (Serverless)
+
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '30 0 * * *'   # 매일 09:30 KST
-    
+  # schedule:
+  #   - cron: '30 0 * * *'   # 매일 09:30 KST (원하면 주석 해제)
+
 permissions:
   contents: read
   pages: write
@@ -17,32 +18,54 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+      # --- pip 캐시 (패키지 설치 가속)
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # --- Hugging Face 모델 캐시 (FinBERT 다운로드 재사용)
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-hf-${{ hashFiles('builder/sentiment.py') }}
+          restore-keys: |
+            ${{ runner.os }}-hf-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -V
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || true
-          pip freeze | sed -n '1,120p'
+          pip install -r requirements.txt
 
-      - name: Show workspace (debug)
-        run: |
-          ls -la
-          find . -maxdepth 3 -type f | sort | sed -n '1,300p'
-
-      # 🔒 오프라인 안전 모드: 네트워크/스크랩/신문 PDFs 모두 skip
-      - name: Run pipeline (OFFLINE_ONLY)
-        #env:
-          #OFFLINE_ONLY: "1"
+      - name: Run pipeline (ONLINE)
+        env:
+          # 모델/토크나이저 캐시 경로 지정(선택)
+          HF_HOME: ~/.cache/huggingface
+          TOKENIZERS_PARALLELISM: "false"
+          FINBERT_BATCH: "16"
+          FINBERT_MAXLEN: "256"
         run: python -m builder.build
 
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: site }
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
   deploy:
     needs: build
@@ -51,5 +74,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
