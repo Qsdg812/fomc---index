@@ -4,3 +4,7 @@ pdfminer.six
 pandas
 numpy
 python-dateutil
+transformers
+torch
+accelerate
+sentencepiece
