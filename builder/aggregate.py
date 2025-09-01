@@ -1,14 +1,23 @@
 from __future__ import annotations
+import math
 import pandas as pd
 from pathlib import Path
 
 NUM_COLS = ["score", "positive", "neutral", "negative"]
 
-def _to_index(x: float) -> int:
-    x = float(x)
-    if x < -1: x = -1
-    if x > 1:  x = 1
-    return int(round((x + 1.0) * 50.0))
+def _to_index(x) -> int:
+    # NaN/None/비유한수 방어 + [-1,1] 클리핑 → [0,100]
+    try:
+        xf = float(x)
+    except (TypeError, ValueError):
+        return 50
+    if not math.isfinite(xf):
+        return 50
+    if xf < -1.0:
+        xf = -1.0
+    if xf > 1.0:
+        xf = 1.0
+    return int(round((xf + 1.0) * 50.0))
 
 def _save(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -34,7 +43,7 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     df["neutral"]  = (df["label"] == 0).astype(float)
     df["negative"] = (df["label"] == -1).astype(float)
 
-    # 일별 집계 (여기서는 숫자만 산출)
+    # 일별 집계 (숫자만 산출)
     daily = (
         df.groupby([pd.Grouper(key="date", freq="D"), "doc_type"], as_index=False)
           .agg(score=("label", "mean"),
@@ -44,7 +53,7 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
           .sort_values("date")
     )
 
-    # 안전장치: 숫자 컬럼을 확실히 숫자로
+    # 숫자 컬럼만 확실히 숫자로
     for c in NUM_COLS:
         daily[c] = pd.to_numeric(daily[c], errors="coerce")
 
@@ -61,12 +70,13 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     st_daily, st_month, st_quarter = resample("statement")
     mn_daily, mn_month, mn_quarter = resample("minutes")
 
-    # 헤드라인(Statement/Minutes 평균)
+    # 헤드라인(Statement/Minutes 평균) — NaN을 0(중립)으로 대체
     headline_m = (
         pd.concat([st_month.assign(src="statement"),
                    mn_month.assign(src="minutes")], ignore_index=True)
           .groupby("date", as_index=False)["score"].mean()
     )
+    headline_m["score"] = pd.to_numeric(headline_m["score"], errors="coerce").fillna(0.0)
     headline_m["index_0_100"] = headline_m["score"].apply(_to_index)
 
     headline_q = (
@@ -74,6 +84,7 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
                    mn_quarter.assign(src="minutes")], ignore_index=True)
           .groupby("date", as_index=False)["score"].mean()
     )
+    headline_q["score"] = pd.to_numeric(headline_q["score"], errors="coerce").fillna(0.0)
     headline_q["index_0_100"] = headline_q["score"].apply(_to_index)
 
     out_dir.mkdir(parents=True, exist_ok=True)
