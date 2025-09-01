@@ -8,7 +8,6 @@ TEXT = CACHE / "text"
 SITE_DATA = ROOT / "site" / "data"
 
 def ensure_dirs() -> None:
-    # 필요 폴더 생성 (들여쓰기 주의)
     for p in (CACHE, RAW, TEXT, SITE_DATA):
         p.mkdir(parents=True, exist_ok=True)
 
