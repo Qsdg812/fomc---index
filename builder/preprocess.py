@@ -22,23 +22,23 @@ SECTION_TITLES = [
 
 def _normalize_and_protect(text: str) -> str:
     text = text.replace("–", "-").replace("—", "-")
-    text = re.sub(r"(\w)-\s+(\w)", r"\1\2", text)     # 하이픈 줄바꿈 붙이기
-    text = re.sub(r"\s+", " ", text).strip()          # 공백 정리
-    text = re.sub(r"(?<=\d)\.(?=\d)", "§", text)      # 숫자.숫자 보호
+    text = re.sub(r"(\w)-\s+(\w)", r"\1\2", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"(?<=\d)\.(?=\d)", "§", text)           # 1.5 → 1§5
     for abbr in ABBREVIATIONS:
-        text = text.replace(abbr, abbr.replace(".", "§"))  # 약어 보호
-    text = re.sub(r"\b([A-Z])\.(?=\s+[A-Z])", r"\1§", text)  # 이니셜 보호
+        text = text.replace(abbr, abbr.replace(".", "§"))  # U.S. → U§S§
+    text = re.sub(r"\b([A-Z])\.(?=\s+[A-Z])", r"\1§", text) # J. Powell → J§ Powell
     return text
 
 def split_sentences(text: str) -> List[str]:
     p = _normalize_and_protect(text)
-    parts = re.split(r"(?<!§)([.!?])\s+", p)  # 마침표 보존 분할
+    parts = re.split(r"(?<!§)([.!?])\s+", p)
     sents: List[str] = []
     i = 0
     while i < len(parts) - 1:
         seg, punct = parts[i], parts[i+1]
         sent = (seg + punct).replace("§", ".").strip(' \t\n"\'')
-        sent = re.sub(r"^\s*[•\-\u2022]\s*", "", sent)  # 불릿 제거
+        sent = re.sub(r"^\s*[•\-\u2022]\s*", "", sent)
         if sent:
             sents.append(sent)
         i += 2
@@ -69,13 +69,16 @@ def preprocess_text_files(text_paths: List[str]) -> List[Dict[str, str]]:
     for tp in text_paths:
         p = Path(tp)
         name = p.stem
-        date_part = name.split("_")[0]
         text = p.read_text(encoding="utf-8", errors="ignore")
         lower_name = p.name.lower()
 
+        # 날짜 추출(파일명 어디에 있어도 YYYY-MM-DD만 찾으면 OK)
+        m = re.search(r"\d{4}-\d{2}-\d{2}", name)
+        date_part = m.group(0) if m else name.split("_")[0]
+
         # Minutes 류
-        if "minutes" in lower_name or "rmpstc" in lower_name or "seo" in lower_name:
-            # 파일명에 섹션 힌트가 들어온 특수 케이스
+        if ("minutes" in lower_name) or ("rmpstc" in lower_name) or ("seo" in lower_name):
+            # 파일명에 섹션 힌트가 들어온 특수 케이스 (예: FOMC_SEO_2023-10-31)
             if "fomc_" in lower_name and "_" in lower_name:
                 try:
                     sec_tag = lower_name.split("_")[1].upper()
@@ -89,8 +92,7 @@ def preprocess_text_files(text_paths: List[str]) -> List[Dict[str, str]]:
                     for s in sents:
                         rows.append({"date": date_part, "doc_type": "minutes",
                                      "section": sec_title, "sentence": s})
-        # Statement
-        else:
+        else:  # Statements
             for s in split_sentences(text):
                 rows.append({"date": date_part, "doc_type": "statement",
                              "section": "Statement", "sentence": s})
