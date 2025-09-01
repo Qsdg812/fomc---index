@@ -5,6 +5,6 @@ pandas
 numpy
 python-dateutil
 
-# --- FinBERT 추론용 ---
+# FinBERT
 transformers
 torch
