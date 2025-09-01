@@ -7,7 +7,6 @@ from .utils import RAW, TEXT, sha256_bytes
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FOMC-Sentiment/1.0)"}
 STATEMENTS_PAGE = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
-MINUTES_YEAR_TPL = "https://www.federalreserve.gov/monetarypolicy/fomcminutes{year}.htm"
 DATE_8_RE = re.compile(r"(20\d{2})(\d{2})(\d{2})")
 STATEMENT_HREF_RE = re.compile(r"/pressreleases/monetary\d{8}[a-z]?\.htm", re.I)
 PDF_RE = re.compile(r"\.pdf$", re.I)
@@ -18,11 +17,7 @@ def _get(url: str) -> requests.Response:
     return r
 
 def discover_statements():
-    try:
-        html = _get(STATEMENTS_PAGE).text
-    except Exception as e:
-        print("[warn] discover_statements: fetch failed:", e)
-        return []
+    html = _get(STATEMENTS_PAGE).text
     soup = BeautifulSoup(html, "html.parser")
     out = []
     for a in soup.find_all("a", href=True):
@@ -38,30 +33,22 @@ def discover_statements():
     out = sorted(set(out), key=lambda x: x[0])
     return out
 
-def discover_minutes(years_back: int = 6):
+def discover_minutes_from_calendar():
+    html = _get(STATEMENTS_PAGE).text
+    soup = BeautifulSoup(html, "html.parser")
     out = []
-    today = datetime.utcnow().date()
-    for y in range(today.year, today.year - years_back, -1):
-        url = MINUTES_YEAR_TPL.format(year=y)
-        try:
-            html = _get(url).text
-        except Exception as e:
-            print("[warn] discover_minutes: fetch year page failed:", url, e)
-            continue
-        soup = BeautifulSoup(html, "html.parser")
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            text = (a.get_text() or "").lower()
-            if "minutes" in text or PDF_RE.search(href):
-                abs_url = "https://www.federalreserve.gov" + href if href.startswith("/") else href
-                m = DATE_8_RE.search(href)
-                if not m:
-                    continue
-                y2, m2, d2 = m.groups()
-                dt = datetime(int(y2), int(m2), int(d2)).date()
-                out.append((dt, abs_url))
-    out = sorted(set(out), key=lambda x: x[0])
-    return out
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        text = (a.get_text() or "").lower()
+        if ("minutes" in text) or ("fomcminutes" in href.lower()) or href.lower().endswith(".pdf"):
+            abs_url = "https://www.federalreserve.gov" + href if href.startswith("/") else href
+            m = DATE_8_RE.search(href)
+            if not m:
+                continue
+            y, mth, d = m.groups()
+            dt = datetime(int(y), int(mth), int(d)).date()
+            out.append((dt, abs_url))
+    return sorted(set(out), key=lambda x: x[0])
 
 def download_and_extract(url: str, date_hint: str) -> str:
     r = _get(url)
