@@ -6,21 +6,18 @@ from pathlib import Path
 NUM_COLS = ["score", "positive", "neutral", "negative"]
 
 def _to_index(x) -> int:
-    # NaN/None/비유한수 방어 + [-1,1] 클리핑 → [0,100]
     try:
         xf = float(x)
     except (TypeError, ValueError):
         return 50
     if not math.isfinite(xf):
         return 50
-    if xf < -1.0:
-        xf = -1.0
-    if xf > 1.0:
-        xf = 1.0
+    xf = max(-1.0, min(1.0, xf))
     return int(round((xf + 1.0) * 50.0))
 
 def _save(df: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True
+    )
     if path.suffix == ".json":
         df.to_json(path, orient="records", force_ascii=False, date_format="iso")
     else:
@@ -34,16 +31,13 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date", "sentence"]).copy()
 
-    # 레이블 예측
     from .sentiment import predict_labels
     df["label"] = predict_labels(df["sentence"].astype(str).tolist())
 
-    # one-hot (float로 강제)
     df["positive"] = (df["label"] == 1).astype(float)
     df["neutral"]  = (df["label"] == 0).astype(float)
     df["negative"] = (df["label"] == -1).astype(float)
 
-    # 일별 집계 (숫자만 산출)
     daily = (
         df.groupby([pd.Grouper(key="date", freq="D"), "doc_type"], as_index=False)
           .agg(score=("label", "mean"),
@@ -53,15 +47,12 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
           .sort_values("date")
     )
 
-    # 숫자 컬럼만 확실히 숫자로
     for c in NUM_COLS:
         daily[c] = pd.to_numeric(daily[c], errors="coerce")
 
     def resample(doc_type: str):
-        # 숫자 컬럼만 선택해 리샘플 (doc_type 제외)
         part = daily[daily["doc_type"] == doc_type].copy()
         part_num = part[["date"] + NUM_COLS].set_index("date").sort_index()
-
         d = part_num.reset_index()
         m = part_num.resample("MS").mean(numeric_only=True).reset_index()
         q = part_num.resample("QS").mean(numeric_only=True).reset_index()
@@ -70,7 +61,6 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     st_daily, st_month, st_quarter = resample("statement")
     mn_daily, mn_month, mn_quarter = resample("minutes")
 
-    # 헤드라인(Statement/Minutes 평균) — NaN을 0(중립)으로 대체
     headline_m = (
         pd.concat([st_month.assign(src="statement"),
                    mn_month.assign(src="minutes")], ignore_index=True)
@@ -87,27 +77,21 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     headline_q["score"] = pd.to_numeric(headline_q["score"], errors="coerce").fillna(0.0)
     headline_q["index_0_100"] = headline_q["score"].apply(_to_index)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Statements 출력
     _save(st_daily.rename(columns={"date": "date"}), out_dir / "Statements_date_data.csv")
     _save(st_month[["date","score"]], out_dir / "Statements_month_data.csv")
     _save(st_quarter[["date","score"]], out_dir / "Statements_quarter_data.csv")
     _save(st_month[["date","positive","neutral","negative"]], out_dir / "Statements_month_ratio.csv")
     _save(st_quarter[["date","positive","neutral","negative"]], out_dir / "Statements_quarter_ratio.csv")
 
-    # Minutes 출력
     _save(mn_daily.rename(columns={"date": "date"}), out_dir / "Minutes_date_data.csv")
     _save(mn_month[["date","score"]], out_dir / "Minutes_month_data.csv")
     _save(mn_quarter[["date","score"]], out_dir / "Minutes_quarter_data.csv")
     _save(mn_month[["date","positive","neutral","negative"]], out_dir / "Minutes_month_ratio.csv")
     _save(mn_quarter[["date","positive","neutral","negative"]], out_dir / "Minutes_quarter_ratio.csv")
 
-    # 인덱스(0~100) 출력
     _save(headline_m[["date","score","index_0_100"]], out_dir / "index_monthly.json")
     _save(headline_q[["date","score","index_0_100"]], out_dir / "index_quarterly.json")
 
-    # 최신 월간 1행
     if not headline_m.empty:
         latest = headline_m.sort_values("date").tail(1)
         latest.to_json(out_dir / "latest_monthly.json",
