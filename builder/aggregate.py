@@ -2,8 +2,9 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 
+NUM_COLS = ["score", "positive", "neutral", "negative"]
+
 def _to_index(x: float) -> int:
-    # [-1,1] → [0,100]
     x = float(x)
     if x < -1: x = -1
     if x > 1:  x = 1
@@ -24,32 +25,55 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date", "sentence"]).copy()
 
-    # 라벨 예측 (여기에 실제 모델 연결 가능)
+    # 레이블 예측
     from .sentiment import predict_labels
     df["label"] = predict_labels(df["sentence"].astype(str).tolist())
 
-    # one-hot 비율
-    df["positive"] = (df["label"] == 1).astype(int)
-    df["neutral"]  = (df["label"] == 0).astype(int)
-    df["negative"] = (df["label"] == -1).astype(int)
+    # one-hot (float로 강제)
+    df["positive"] = (df["label"] == 1).astype(float)
+    df["neutral"]  = (df["label"] == 0).astype(float)
+    df["negative"] = (df["label"] == -1).astype(float)
 
-    # 일별 집계
-    daily = (df.groupby([pd.Grouper(key="date", freq="D"), "doc_type"], as_index=False).agg(score=("label", "mean"), positive=("positive", "mean"),neutral=("neutral", "mean"), negative=("negative", "mean")).sort_values("date"))
+    # 일별 집계 (여기서는 숫자만 산출)
+    daily = (
+        df.groupby([pd.Grouper(key="date", freq="D"), "doc_type"], as_index=False)
+          .agg(score=("label", "mean"),
+               positive=("positive", "mean"),
+               neutral=("neutral", "mean"),
+               negative=("negative", "mean"))
+          .sort_values("date")
+    )
+
+    # 안전장치: 숫자 컬럼을 확실히 숫자로
+    for c in NUM_COLS:
+        daily[c] = pd.to_numeric(daily[c], errors="coerce")
 
     def resample(doc_type: str):
-        part = daily[daily["doc_type"] == doc_type].set_index("date").sort_index()
-        m = part.resample("MS").mean().reset_index()
-        q = part.resample("QS").mean().reset_index()
-        return part.reset_index(), m, q
+        # 숫자 컬럼만 선택해 리샘플 (doc_type 제외)
+        part = daily[daily["doc_type"] == doc_type].copy()
+        part_num = part[["date"] + NUM_COLS].set_index("date").sort_index()
+
+        d = part_num.reset_index()
+        m = part_num.resample("MS").mean(numeric_only=True).reset_index()
+        q = part_num.resample("QS").mean(numeric_only=True).reset_index()
+        return d, m, q
 
     st_daily, st_month, st_quarter = resample("statement")
     mn_daily, mn_month, mn_quarter = resample("minutes")
 
     # 헤드라인(Statement/Minutes 평균)
-    headline_m = (pd.concat([st_month.assign(src="statement"), mn_month.assign(src="minutes")], ignore_index=True).groupby("date", as_index=False)["score"].mean())
+    headline_m = (
+        pd.concat([st_month.assign(src="statement"),
+                   mn_month.assign(src="minutes")], ignore_index=True)
+          .groupby("date", as_index=False)["score"].mean()
+    )
     headline_m["index_0_100"] = headline_m["score"].apply(_to_index)
 
-    headline_q = (pd.concat([st_quarter.assign(src="statement"), mn_quarter.assign(src="minutes")], ignore_index=True).groupby("date", as_index=False)["score"].mean())
+    headline_q = (
+        pd.concat([st_quarter.assign(src="statement"),
+                   mn_quarter.assign(src="minutes")], ignore_index=True)
+          .groupby("date", as_index=False)["score"].mean()
+    )
     headline_q["index_0_100"] = headline_q["score"].apply(_to_index)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -75,4 +99,5 @@ def compute_timeseries(rows: list[dict], out_dir: Path) -> None:
     # 최신 월간 1행
     if not headline_m.empty:
         latest = headline_m.sort_values("date").tail(1)
-        latest.to_json(out_dir / "latest_monthly.json", orient="records", force_ascii=False, date_format="iso")
+        latest.to_json(out_dir / "latest_monthly.json",
+                       orient="records", force_ascii=False, date_format="iso")
