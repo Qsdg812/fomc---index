@@ -56,7 +56,7 @@ async function loadLatest(){
         {range:[0,20], color:'#f9e3e3'}, {range:[20,40], color:'#fbe9cf'}, {range:[40,60], color:'#eef1f5'},
         {range:[60,80], color:'#dff4e0'}, {range:[80,100], color:'#d7f0ff'}],
         threshold: { line: { width: 3 }, thickness: 0.75, value: v }
-      }, title: { text: 'Fear ↔ Greed' }
+      }, title: { text: 'Sentiment index' }
     }], {margin:{t:30,b:0}});
 
     document.getElementById('latest-meta').textContent = `최근 값: ${v} (기준일 ${j.date.slice(0,10)})`;
